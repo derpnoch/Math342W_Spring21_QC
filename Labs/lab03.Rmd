@@ -195,6 +195,8 @@ simple_viz_obj
 
 Does this make sense given the values of $beta_0$ and $beta_1$?
 
+yes because beta_0 in the y intercept and equals to 3 and beta_1 is the slope and equals to -2 and if you see the above graph we have something simliar to that. 
+
 Write a function `my_simple_ols` that takes in a vector `x` and vector `y` and returns a list that contains the `b_0` (intercept), `b_1` (slope), `yhat` (the predictions), `e` (the residuals), `SSE`, `SST`, `MSE`, `RMSE` and `Rsq` (for the R-squared metric). Internally, you can only use the functions `sum` and `length` and other basic arithmetic operations. You should throw errors if the inputs are non-numeric or not the same length. You should also name the class of the return value `my_simple_ols_obj` by using the `class` function as a setter. No need to create ROxygen documentation here.
 
 ```{r}
