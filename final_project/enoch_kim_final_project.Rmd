@@ -1,0 +1,291 @@
+---
+title: "Math 342W Final Project"
+author: "Enoch Kim"
+date: "11:59PM May 25, 2021"
+output:
+  word_document: default
+  pdf_document:
+    latex_engine: xelatex
+---
+
+
+```{r}
+pacman::p_load(dplyr,magrittr,stringr, skimr)
+
+#Importing the Housing data
+housing_data = read.csv("C:\\Users\\Enoch Kim\\Desktop\\Spring 2021\\Math 342w\\myGit\\Math342W_Spring21_QC\\final_project\\housing_data_2016_2017.csv")
+#View(housing_data)
+
+#Feature Selection, selecting the columns I'll be using for the model
+cleaned_housing_data = housing_data %<>%
+  select(approx_year_built ,cats_allowed, common_charges ,coop_condo, dining_room_type, dogs_allowed, fuel_type, garage_exists, kitchen_type, maintenance_cost, num_bedrooms, num_full_bathrooms, num_half_bathrooms, num_total_rooms, total_taxes ,sale_price, sq_footage, walk_score, URL)
+
+#View(cleaned_housing_data)
+```
+
+```{r}
+#Cleaning the Feature Selection, so I can run the algorithms and create a model
+
+cleaned_housing_data_table = cleaned_housing_data %>%
+  
+  mutate(cats_allowed = as.factor(ifelse(cats_allowed == "no", "No", "Yes"))) %>%
+  
+  mutate(common_charges = as.numeric(gsub('[$,]', '', common_charges))) %>%
+  
+  mutate(common_charges = as.numeric(ifelse(coop_condo == "co_op", replace(common_charges, is.na(common_charges), 0), common_charges))) %>%
+  
+  mutate(coop_condo = as.factor(coop_condo)) %>%
+  
+  mutate(dining_room_type = as.factor(dining_room_type)) %>%
+  
+  mutate(dogs_allowed = as.factor(ifelse(dogs_allowed == "no", "No", "Yes"))) %>%
+  
+  mutate(fuel_type = as.factor(ifelse(fuel_type == "none" | fuel_type == "Other", "other", fuel_type))) %>%
+  
+  mutate(garage_exists = as.factor(ifelse(is.na(garage_exists), "no", "yes"))) %>%
+  
+  mutate(kitchen_type = as.factor(case_when(kitchen_type == "Combo" | kitchen_type == "combo" ~ "Combo",
+                                            kitchen_type == "eat in" | kitchen_type == "eatin" | kitchen_type == "Eat In" | kitchen_type == "Eat in" ~ "Eat_In",
+                                            kitchen_type == "efficiemcy" | kitchen_type == "efficiency" | kitchen_type == "efficiency kitchen" | 
+                                            kitchen_type == "efficiency kitchene" | kitchen_type == "efficiency ktchen" ~ "Efficient"))) %>%
+  
+  mutate(maintenance_cost = as.numeric(str_remove_all(maintenance_cost, "[$]"))) %>%
+  
+  mutate(maintenance_cost = ifelse(coop_condo == "condo", replace(maintenance_cost, is.na(maintenance_cost), 0), maintenance_cost)) %>%
+  
+  mutate(num_half_bathrooms = replace(num_half_bathrooms, is.na(num_half_bathrooms), 0)) %>%
+  
+  mutate(total_taxes = as.numeric(gsub('[$,]', '', total_taxes))) %>%
+  
+  mutate(total_taxes = replace(total_taxes, is.na(total_taxes), 0)) %>%
+  
+  mutate(sale_price = as.numeric(gsub('[$,]', '', sale_price))) %>%
+  
+  #Got score from this site, https://www.walkscore.com/methodology.shtml#:~:text=Walk%20Score%20measures%20the%20walkability%20of%20any%20address%20using%20a,miles)%20are%20given%20maximum%20points
+  
+  mutate(walk_score = as.factor(case_when(
+    walk_score <= 24 ~ "Car-Dependent", 
+    walk_score > 24 & walk_score < 50 ~ "Car-Dependent" ,
+    walk_score > 49 & walk_score < 70 ~ "Somewhat Walkable", 
+    walk_score > 69 & walk_score < 90 ~ "Very Walkable", 
+    walk_score > 89 & walk_score <= 100 ~ "Walker's Paradise"))) %>%
+  
+  rename(Zipcode = URL) %>%
+  
+  mutate(Zipcode = as.numeric(str_remove(str_sub(Zipcode, start = -15, end = -10), pattern = "-"))) %>%
+  
+  mutate(Zipcode = as.factor(case_when(
+    Zipcode == "11361" | Zipcode == "11362" | Zipcode == "11363" | Zipcode == "11364" ~ "Northeast Queens",
+    Zipcode == "11354" | Zipcode == "11355" | Zipcode == "11356" | Zipcode == "11357" | Zipcode == "11358" | Zipcode == "11359" | Zipcode == "11360" ~ "North Queens",
+    Zipcode == "11365" | Zipcode == "11366" | Zipcode == "11367" ~ "Central Queens",
+    Zipcode == "11412" | Zipcode == "11423" | Zipcode == "11432" | Zipcode == "11433" | Zipcode == "11434" | Zipcode == "11435" | Zipcode == "11436" ~ "Jamaica",
+    Zipcode == "11101" | Zipcode == "11102" | Zipcode == "11103" | Zipcode == "11104" | Zipcode == "11105" | Zipcode == "11106"~ "Northwest Queens",
+    Zipcode == "11374" | Zipcode == "11375" | Zipcode == "11379" | Zipcode == "11385" ~ "West Central Queens",
+    Zipcode == "11004" | Zipcode == "11005" | Zipcode == "11411" | Zipcode == "11413" | Zipcode == "11422" | Zipcode == "11426" | Zipcode == "11427" | Zipcode == "11428" | Zipcode == "11429"~ "Southeast Queens",
+    Zipcode == "11414" | Zipcode == "11415" | Zipcode == "11416" | Zipcode == "11417" | Zipcode == "11418" | Zipcode == "11419" | Zipcode == "11420" | Zipcode == "11421" ~  "Southwest Queens",
+    Zipcode == "11368" | Zipcode == "11369" | Zipcode == "11370" | Zipcode == "11372" | Zipcode == "11373" | Zipcode == "11377" | Zipcode == "11378"  ~ "West Queens",
+    TRUE ~ "Other" ))) %>%
+  
+  mutate(total_charges = ifelse(coop_condo == "condo", (common_charges + (total_taxes/12)), 0)) %>%
+  
+  select(-total_taxes, -common_charges)
+
+skim(cleaned_housing_data_table)
+
+#View(cleaned_housing_data_table)
+
+#write.csv(cleaned_housing_data_table, "C:\\Users\\Enoch Kim\\Desktop\\Spring 2021\\Math 342w\\myGit\\Math342W_Spring21_QC\\final_project\\cleaned_housing_data_table.csv")
+
+```
+
+
+```{r}
+#Since there are missing values, I will deal with the missing data by adding dummy features and create is_missing columns.
+pacman::p_load(tidyverse, missForest)
+set.seed(1989)
+missing_data = tbl_df(apply(is.na(cleaned_housing_data_table), 2, as.numeric))
+colnames(missing_data) = paste("is_missing_", colnames(cleaned_housing_data_table), sep = "")
+missing_data = tbl_df(t(unique(t(missing_data))))
+missing_data %<>%
+  select_if(function(x){sum(x) > 0})
+
+skim(missing_data)
+
+final_cleaned_housing_data_table = cbind(missing_data, cleaned_housing_data_table)
+skim(final_cleaned_housing_data_table)
+summary(final_cleaned_housing_data_table)
+#write.csv(final_cleaned_housing_data_table, "C:\\Users\\Enoch Kim\\Desktop\\Spring 2021\\Math 342w\\myGit\\Math342W_Spring21_QC\\final_project\\final_cleaned_housing_data_table.csv")
+```
+
+```{r}
+#Since some sale_price are NA, I will be dropping the rows that have NA.
+final_cleaned_housing_data_table_missing_responses = final_cleaned_housing_data_table %>%
+  filter(is.na(sale_price))
+
+final_cleaned_housing_data_table_not_missing_responses = final_cleaned_housing_data_table %>%
+  filter(!is.na(sale_price))
+
+#We now must setup train and testing, please note: In the final_cleaned_housing_data_table_not_missing_responses there are 528 observation
+
+n = nrow(final_cleaned_housing_data_table_not_missing_responses)
+k = 5
+
+test_indices = sample(1 : n, 1 / k * n)
+train_indices = setdiff(1 : n, test_indices)
+
+n_test = as.integer((1 / k) * n)
+n_train = as.integer(n - n_test)
+
+training_data = final_cleaned_housing_data_table_not_missing_responses[train_indices, ]
+testing_data = final_cleaned_housing_data_table_not_missing_responses[test_indices, ]
+
+X_test = testing_data %>%
+  mutate(sale_price = NA)
+
+y_test = testing_data$sale_price
+
+skim(final_cleaned_housing_data_table_not_missing_responses)
+
+```
+
+```{r}
+#I will deal by the missing data by now imputing the data table.
+missing_data2 = rbind(training_data, X_test, final_cleaned_housing_data_table_missing_responses)
+
+complete_housing_data = missForest(missing_data2)$ximp
+complete_housing_data
+sum(is.na(complete_housing_data))
+skim(complete_housing_data)
+
+complete_housing_data_final = complete_housing_data %>%
+  filter(is_missing_sale_price == 0) %>%
+  select(-is_missing_sale_price)
+
+complete_housing_data_final = cbind(complete_housing_data_final[, -(1 : 9)], tbl_df(t(unique(t(complete_housing_data_final[, (1 : 9)])))))
+
+complete_housing_data_final_training = complete_housing_data_final[1 : n_train, ]
+complete_housing_data_final_test = complete_housing_data_final[(n_train + 1):n, ]
+
+complete_housing_data_final_test$sale_price = y_test
+
+```
+
+
+```{r}
+#Before creating models and after imputing, I need to merge charges with maintenance cost.
+
+complete_housing_data_final_test_2 = complete_housing_data_final_test %>%
+  mutate(final_charges = maintenance_cost + total_charges) %>%
+  select(-maintenance_cost, -total_charges)
+
+complete_housing_data_final_training_2 = complete_housing_data_final_training %>%
+  mutate(final_charges = maintenance_cost + total_charges) %>%
+  select(-maintenance_cost, -total_charges) 
+
+complete_housing_data_final_ytest = complete_housing_data_final_test_2$sale_price
+complete_housing_data_final_Xtest = complete_housing_data_final_test_2
+complete_housing_data_final_Xtest$sale_price = NULL
+
+complete_housing_data_final_training_2_ytrain = complete_housing_data_final_training_2$sale_price
+complete_housing_data_final_training_2_Xtrain = complete_housing_data_final_training_2
+complete_housing_data_final_training_2_Xtrain$sale_price = NULL
+```
+
+```{r}
+#Regression Tree Model
+pacman::p_load(YARF)
+options(java.parameters = "-Xmx4000m")
+
+reg_tree = YARFCART(complete_housing_data_final_training_2_Xtrain, complete_housing_data_final_training_2_ytrain)
+reg_tree
+get_tree_num_nodes_leaves_max_depths(reg_tree)
+tree_image = illustrate_trees(reg_tree, max_depth = 5, open_file = TRUE, length_in_px_per_half_split = 40)
+
+#In-Sample for numbers for Regression Tree Model
+y_hat_train = predict(reg_tree, complete_housing_data_final_training_2_Xtrain)
+e = complete_housing_data_final_training_2_ytrain - y_hat_train
+sd(e) #This is s_e
+1 - sd(e) / sd(complete_housing_data_final_training_2_ytrain) #This is R squared
+
+#Out of Sample numbers for Regression Tree Model
+y_hat_test_tree = predict(reg_tree, complete_housing_data_final_Xtest)
+e = complete_housing_data_final_ytest - y_hat_test_tree
+sd(e) #This is s_e
+1 - sd(e) / sd(complete_housing_data_final_ytest) #This is R squared
+```
+
+```{r}
+#Linear Model
+pacman::p_load(xtable)
+
+lin_mod = lm(complete_housing_data_final_training_2_ytrain ~ ., complete_housing_data_final_training_2_Xtrain)
+lin_mod
+
+#In-Sample for numbers for Linear Model
+summary(lin_mod)$sigma
+summary(lin_mod)$r.squared
+xtable(lin_mod)
+summary(lin_mod)
+
+#Out of Sample numbers for Linear Model
+y_hat_test_linear = predict(lin_mod, complete_housing_data_final_Xtest)
+e = complete_housing_data_final_ytest - y_hat_test_linear
+sd(e) #This is s_e
+1 - sd(e) / sd(complete_housing_data_final_ytest) #This is R squared
+```
+
+
+```{r}
+pacman::p_load(mlr)
+complete_housing_data_X = complete_housing_data_final_training_2_Xtrain
+y_salesprice_data = complete_housing_data_final_training_2_ytrain
+mlr_data = cbind(y_salesprice_data, complete_housing_data_X)
+colnames(mlr_data)[1] = "sales_price"
+task = makeRegrTask(data = mlr_data, target = "sales_price")
+
+parms = makeParamSet(
+  makeIntegerParam("mtry", lower = 2, upper = ncol(complete_housing_data_final_training_2_Xtrain)),
+  makeIntegerParam("ntree", lower = 2, upper = 90),
+  makeIntegerParam("nodesize", lower = 2, upper = 90)
+)
+
+
+desc <- makeResampleDesc("CV", iters = 20)
+ctrl <- makeTuneControlRandom(maxit = 20)
+mlr_ret <- tuneParams("regr.randomForest", task = task, resampling = desc, par.set = parms, control = ctrl, measures = list(rmse))
+
+#The most optimal result
+mlr_ret
+
+
+#Getting the In=Sample for Final model
+rf_mod = YARF(complete_housing_data_X, y_salesprice_data, mtry= as.integer(mlr_ret$x[1]), num_trees = as.integer(mlr_ret$x[2]))
+rf_mod
+rf_is_mod = YARF(complete_housing_data_final_training_2_Xtrain, complete_housing_data_final_training_2_ytrain, mtry= as.integer(mlr_ret$x[1]), num_trees = as.integer(mlr_ret$x[2]))
+rf_is_mod
+yhat = predict(rf_is_mod, complete_housing_data_final_Xtest)
+
+#Getting the Out of Sample for Final model
+oos_rmse = sqrt(mean((complete_housing_data_final_ytest - yhat) ^ 2))
+oos_rsq = 1 - sum((complete_housing_data_final_ytest - yhat) ^ 2) / sum((complete_housing_data_final_ytest - mean(y_salesprice_data)) ^ 2)
+oos_rmse
+oos_rsq
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
